@@ -1,3 +1,16 @@
 # Benchmark outputs
 cloud-web-frameworks/benchmark/results/*
 !cloud-web-frameworks/benchmark/results/.gitkeep
+# Python virtual environment
+venv/
+.venv/
+
+# Maven / Java build outputs
+target/
+cloud-web-frameworks/webflux-r2dbc/target/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

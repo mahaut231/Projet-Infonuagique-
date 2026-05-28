@@ -1,6 +1,0 @@
-com\cloudwebframeworks\webfluxr2dbc\model\Product.class
-com\cloudwebframeworks\webfluxr2dbc\repository\ProductRepository.class
-com\cloudwebframeworks\webfluxr2dbc\service\ProductService.class
-com\cloudwebframeworks\webfluxr2dbc\dto\ProductResponse.class
-com\cloudwebframeworks\webfluxr2dbc\controller\ProductController.class
-com\cloudwebframeworks\webfluxr2dbc\WebfluxR2dbcApplication.class
