@@ -1,6 +1,3 @@
 # Benchmark outputs
-cloud-web-frameworks/benchmark/results/*.csv
-cloud-web-frameworks/benchmark/results/*.json
-cloud-web-frameworks/benchmark/results/*.png
-cloud-web-frameworks/benchmark/results/*.txt
-cloud-web-frameworks/benchmark/results/graphs/
+cloud-web-frameworks/benchmark/results/*
+!cloud-web-frameworks/benchmark/results/.gitkeep
