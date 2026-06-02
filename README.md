@@ -102,4 +102,4 @@ docker compose --profile webflux down
 docker compose --profile webflux down -v
 ```
 
-(Remplacer _webflux par _mvc_ pour nettoyer mvc-jpa)
+(Remplacer _webflux_ par _mvc_ pour nettoyer mvc-jpa)
