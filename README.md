@@ -24,6 +24,11 @@ L’objectif est d’évaluer la scalabilité, la latence, l’utilisation des r
 docker compose --profile webflux up --build -d
 ```
 
+## Lancement de la version MVC-JPA avec Docker
+
+```powershell
+docker compose --profile mvc up -d
+
 ## Vérification
 
 ```powershell
@@ -33,6 +38,7 @@ curl.exe "http://localhost:8082/actuator/health"
 curl.exe "http://localhost:8082/products/1"
 curl.exe "http://localhost:8082/external/recommendations/4?delayMs=300"
 ```
+(Utilisez le bon port selon l'approche que vous voulez utiliser)
 
 ## Endpoints communs
 
@@ -58,6 +64,8 @@ k6 run -e BASE_URL=http://localhost:8082 -e DELAY_MS=300 benchmark/scenario-io.j
 k6 run -e BASE_URL=http://localhost:8082 -e N=35 benchmark/scenario-cpu.js --summary-export benchmark/results/docker-webflux-cpu-summary.json
 ```
 
+(Utilisez le bon port selon l'approche que vous voulez utiliser)
+
 ## Métriques système
 
 Pendant les tests :
@@ -66,11 +74,14 @@ Pendant les tests :
 docker stats --no-stream common-postgres mock-service webflux-r2dbc
 ```
 
+(Remplacer _webflux-r2dbc_ par _mvc-jpa_ pour tester avec mvc-jpa)
+
 Capture dans un fichier :
 
 ```powershell
 docker stats --no-stream common-postgres mock-service webflux-r2dbc > benchmark/results/docker-stats-webflux.txt
 ```
+(Remplacer _webflux-r2dbc_ par _mvc-jpa_ pour tester avec mvc-jpa)
 
 ## Règles WebFlux
 
@@ -89,3 +100,5 @@ La version WebFlux doit rester strictement non bloquante :
 docker compose --profile webflux down
 docker compose --profile webflux down -v
 ```
+
+(Remplacer _webflux par _mvc_ pour nettoyer mvc-jpa)
