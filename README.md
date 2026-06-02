@@ -28,6 +28,7 @@ docker compose --profile webflux up --build -d
 
 ```powershell
 docker compose --profile mvc up -d
+```
 
 ## Vérification
 
