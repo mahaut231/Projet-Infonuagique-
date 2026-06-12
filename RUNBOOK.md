@@ -43,21 +43,29 @@ k6 run -e BASE_URL=http://localhost:8082 -e DELAY_MS=300 benchmark/scenario-io.j
 k6 run -e BASE_URL=http://localhost:8082 -e N=35 benchmark/scenario-cpu.js --summary-export benchmark/results/docker-webflux-cpu-summary.json
 ```
 
-## 7. Capturer les métriques Docker
+## 7. Scénario Saturation (point de rupture)
+
+```powershell
+k6 run -e BASE_URL=http://localhost:8082 benchmark/scenario-saturation.js --summary-export benchmark/results/docker-webflux-saturation-summary.json
+```
+
+Ce scénario monte jusqu'à 800 VUs sans sleep sur GET /products/{id}. L'objectif est de trouver le seuil où la latence explose et/ou le taux d'erreur dépasse 10%. Adapter `BASE_URL` et le préfixe du fichier JSON pour chaque framework.
+
+## 8. Capturer les métriques Docker
 
 ```powershell
 docker stats --no-stream common-postgres mock-service webflux-r2dbc
 docker stats --no-stream common-postgres mock-service webflux-r2dbc > benchmark/results/docker-stats-webflux.txt
 ```
 
-## 8. Arrêter les services
+## 9. Arrêter les services
 
 ```powershell
 docker compose --profile webflux down
 docker compose --profile webflux down -v
 ```
 
-## 9. Adaptation aux autres versions
+## 10. Adaptation aux autres versions
 
 Pour MVC + JPA :
 
