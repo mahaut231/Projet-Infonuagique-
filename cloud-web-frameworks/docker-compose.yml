@@ -70,3 +70,25 @@ services:
         condition: service_started
     mem_limit: 1536m
     cpus: 2.0
+
+  mvc-virtual-threads:
+    build:
+      context: ./mvc-virtual-threads
+    container_name: mvc-virtual-threads
+    profiles:
+      - virtual-threads
+    ports:
+      - "8083:8083"
+    environment:
+      SERVER_PORT: 8083
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      MOCK_SERVICE_BASE_URL: http://mock-service:9090
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-service:
+        condition: service_started
+    mem_limit: 1536m
+    cpus: 2.0
