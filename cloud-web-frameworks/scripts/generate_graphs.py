@@ -61,6 +61,8 @@ def parse_filename(path: Path) -> tuple[str, str]:
         scenario = "CRUD"
     elif "smoke" in name:
         scenario = "Smoke"
+    elif "saturation" in name:
+        scenario = "Saturation"
     else:
         scenario = "Unknown"
 
@@ -143,6 +145,15 @@ def load_k6_csv(path: Path) -> pd.DataFrame | None:
     return df
 
 
+def extract_vus(df: pd.DataFrame) -> pd.Series:
+    vus = df[df["metric_name"] == "vus"].copy()
+    if vus.empty:
+        return pd.Series(dtype=float)
+    vus = vus.set_index("timestamp").sort_index()
+    vus["metric_value"] = pd.to_numeric(vus["metric_value"], errors="coerce")
+    return vus["metric_value"].resample("10s").max().dropna()
+
+
 def timeseries_duration_chart(csv_path: Path, out_dir: Path) -> None:
     df = load_k6_csv(csv_path)
     if df is None:
@@ -158,21 +169,31 @@ def timeseries_duration_chart(csv_path: Path, out_dir: Path) -> None:
     durations["metric_value"] = pd.to_numeric(durations["metric_value"], errors="coerce")
     durations = durations.dropna(subset=["metric_value"])
 
-    # P95 by 10-second buckets
     p95 = durations["metric_value"].resample("10s").quantile(0.95).dropna()
+    p99 = durations["metric_value"].resample("10s").quantile(0.99).dropna()
     avg = durations["metric_value"].resample("10s").mean().dropna()
 
     if p95.empty:
         return
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(p95.index, p95.values, label="P95")
-    plt.plot(avg.index, avg.values, label="Moyenne")
-    plt.title(f"Latence au cours du temps — {framework} — {scenario}")
-    plt.xlabel("Temps")
-    plt.ylabel("Latence HTTP (ms)")
-    plt.legend()
-    plt.xticks(rotation=30)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(p95.index, p95.values, label="P95", color="tab:orange")
+    ax.plot(p99.index, p99.values, label="P99", color="tab:red", linestyle="--")
+    ax.plot(avg.index, avg.values, label="Moyenne", color="tab:blue")
+    ax.set_title(f"Latence au cours du temps — {framework} — {scenario}")
+    ax.set_xlabel("Temps")
+    ax.set_ylabel("Latence HTTP (ms)")
+    ax.legend(loc="upper left")
+    ax.tick_params(axis="x", rotation=30)
+
+    vus = extract_vus(df)
+    if not vus.empty:
+        ax2 = ax.twinx()
+        ax2.fill_between(vus.index, vus.values, alpha=0.12, color="gray")
+        ax2.set_ylabel("VUs actifs", color="gray")
+        ax2.tick_params(axis="y", labelcolor="gray")
+        ax2.set_ylim(bottom=0)
+
     plt.tight_layout()
     out_file = out_dir / f"{csv_path.stem}-latency-timeseries.png"
     plt.savefig(out_file, dpi=160)
@@ -197,16 +218,81 @@ def timeseries_throughput_chart(csv_path: Path, out_dir: Path) -> None:
     if req_s.empty:
         return
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(req_s.index, req_s.values)
-    plt.title(f"Débit au cours du temps — {framework} — {scenario}")
-    plt.xlabel("Temps")
-    plt.ylabel("Requêtes/s")
-    plt.xticks(rotation=30)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(req_s.index, req_s.values, color="tab:green")
+    ax.set_title(f"Débit au cours du temps — {framework} — {scenario}")
+    ax.set_xlabel("Temps")
+    ax.set_ylabel("Requêtes/s")
+    ax.tick_params(axis="x", rotation=30)
+
+    vus = extract_vus(df)
+    if not vus.empty:
+        ax2 = ax.twinx()
+        ax2.fill_between(vus.index, vus.values, alpha=0.12, color="gray")
+        ax2.set_ylabel("VUs actifs", color="gray")
+        ax2.tick_params(axis="y", labelcolor="gray")
+        ax2.set_ylim(bottom=0)
+
     plt.tight_layout()
     out_file = out_dir / f"{csv_path.stem}-throughput-timeseries.png"
     plt.savefig(out_file, dpi=160)
     plt.close()
+
+
+def compare_frameworks_timeseries_chart(csv_files: list[Path], scenario: str, out_dir: Path) -> None:
+    """Overlay P95 latency and throughput curves from multiple frameworks for the same scenario."""
+    fig, (ax_lat, ax_thr) = plt.subplots(2, 1, figsize=(12, 8))
+    has_data = False
+
+    for csv_path in sorted(csv_files):
+        df = load_k6_csv(csv_path)
+        if df is None:
+            continue
+
+        framework, _ = parse_filename(csv_path)
+        durations = df[df["metric_name"] == "http_req_duration"].copy()
+        if durations.empty:
+            continue
+
+        durations = durations.set_index("timestamp").sort_index()
+        durations["metric_value"] = pd.to_numeric(durations["metric_value"], errors="coerce")
+        durations = durations.dropna(subset=["metric_value"])
+
+        p95 = durations["metric_value"].resample("10s").quantile(0.95).dropna()
+        req_s = durations["metric_value"].resample("10s").count() / 10.0
+
+        if p95.empty:
+            continue
+
+        t0 = p95.index[0]
+        rel_lat = [(t - t0).total_seconds() for t in p95.index]
+        ax_lat.plot(rel_lat, p95.values, label=framework)
+
+        t0r = req_s.index[0]
+        rel_thr = [(t - t0r).total_seconds() for t in req_s.index]
+        ax_thr.plot(rel_thr, req_s.values, label=framework)
+        has_data = True
+
+    if not has_data:
+        plt.close()
+        return
+
+    ax_lat.set_title(f"Comparaison latence P95 — Scénario {scenario}")
+    ax_lat.set_ylabel("Latence P95 (ms)")
+    ax_lat.set_xlabel("Temps relatif (s)")
+    ax_lat.legend()
+
+    ax_thr.set_title(f"Comparaison débit — Scénario {scenario}")
+    ax_thr.set_ylabel("Requêtes/s")
+    ax_thr.set_xlabel("Temps relatif (s)")
+    ax_thr.legend()
+
+    plt.tight_layout()
+    safe_name = scenario.lower().replace(" ", "-").replace("/", "")
+    out_file = out_dir / f"compare-{safe_name}-timeseries.png"
+    plt.savefig(out_file, dpi=160)
+    plt.close()
+    print(f"[OK] Multi-framework chart: {out_file.name}")
 
 
 def write_summary_table(df: pd.DataFrame, out_dir: Path) -> None:
@@ -281,6 +367,13 @@ def main() -> None:
             "Taux d’erreur par scénario",
             out_dir / "summary-error-rate.png",
         )
+        bar_chart(
+            summaries,
+            "duration_p99_ms",
+            "Latence P99 (ms)",
+            "Latence P99 par scénario",
+            out_dir / "summary-latency-p99.png",
+        )
 
     csv_files = sorted(results_dir.glob("*.csv"))
     if not csv_files:
@@ -289,6 +382,14 @@ def main() -> None:
         for csv_file in csv_files:
             timeseries_duration_chart(csv_file, out_dir)
             timeseries_throughput_chart(csv_file, out_dir)
+
+        scenario_groups: dict[str, list[Path]] = {}
+        for csv_file in csv_files:
+            _, scen = parse_filename(csv_file)
+            scenario_groups.setdefault(scen, []).append(csv_file)
+
+        for scen, files in scenario_groups.items():
+            compare_frameworks_timeseries_chart(files, scen, out_dir)
 
     print(f"[OK] Graphs generated in: {out_dir.resolve()}")
 
