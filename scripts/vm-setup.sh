@@ -6,6 +6,10 @@ set -euo pipefail
 MAVEN_VERSION="3.9.9"
 MAVEN_URL="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
 
+echo "=== Nettoyage des résidus d'installations précédentes ==="
+sudo rm -f /etc/apt/sources.list.d/k6.list
+sudo rm -f /usr/share/keyrings/k6-archive-keyring.gpg
+
 echo "=== Mise à jour apt ==="
 sudo apt-get update -y
 sudo apt-get install -y \
