@@ -57,15 +57,15 @@ Spring MVC + Virtual Threads& 8083          & Tomcat + JEP~444, JPA, HikariCP   
 \end{tabular}
 \end{center}
 
-\noindent Deux corrections techniques supplémentaires ont été apportées au code WebFlux~:
-\begin{itemize}
-  \item Remplacement de \texttt{Schedulers.boundedElastic()} par \texttt{Schedulers.parallel()}
-        dans le service CPU-bound (scheduler adapté au calcul intensif).
-  \item Configuration du \texttt{ConnectionProvider} Netty pour le WebClient
-        (\texttt{maxConnections: 500}, \texttt{pendingAcquireMaxCount: -1}).
-  \item Ajout du paramètre \texttt{spring.r2dbc.pool.max-acquire-time: 30s} pour éviter
-        les attentes indéfinies de connexion R2DBC sous charge extrême.
-\end{itemize}
+Trois corrections techniques supplémentaires ont été apportées au code WebFlux afin de garantir
+une comparaison équitable. Premièrement, le scheduler \texttt{Schedulers.boundedElastic()} a été
+remplacé par \texttt{Schedulers.parallel()} dans le service CPU-bound, ce dernier étant conçu pour
+le calcul intensif et non pour les opérations bloquantes. Deuxièmement, le \texttt{ConnectionProvider}
+Netty du WebClient a été configuré explicitement avec \texttt{maxConnections~= 500} et
+\texttt{pendingAcquireMaxCount~= -1} (file illimitée), afin d'aligner son comportement avec le
+pool HTTP des autres frameworks. Troisièmement, le paramètre
+\texttt{spring.r2dbc.pool.max-acquire-time~= 30s} a été ajouté pour éviter les attentes
+indéfinies d'acquisition de connexion R2DBC sous charge extrême.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Protocole de mesure}
@@ -268,35 +268,27 @@ service externe, ce qui crée de la contention côté mock et augmente la latenc
 \subsection{Pourquoi WebFlux s'effondrait à saturation (avant correction)}
 
 Sans les corrections apportées, WebFlux atteignait seulement 24,6~req/s avec 14,5~\% d'erreurs à
-saturation. La cause était une double défaillance de configuration~:
-
-\begin{enumerate}
-  \item \textbf{Pool R2DBC sans \texttt{max-acquire-time}}~: les requêtes ne pouvant acquérir de
-        connexion attendaient indéfiniment, jusqu'au timeout de 60~s imposé par k6.
-  \item \textbf{WebClient sans pool configuré}~: le comportement du pool de connexions Netty par
-        défaut créait une contention sous 800~VUs simultanés.
-\end{enumerate}
-
-Après correction, WebFlux passe de 24,6 à \textbf{883~req/s}, soit une amélioration de
-\textbf{35$\times$}, confirmant que l'effondrement était entièrement dû à la configuration et non
-à l'architecture réactive elle-même.
+saturation. La cause était une double défaillance de configuration. D'une part, l'absence de
+\texttt{max-acquire-time} sur le pool R2DBC faisait attendre indéfiniment les requêtes ne pouvant
+acquérir de connexion, jusqu'au timeout de 60~s imposé par k6, ce qui provoquait une paralysie
+progressive du système. D'autre part, l'absence de pool configuré sur le WebClient créait une
+contention non maîtrisée sous 800~VUs simultanés. Après correction, WebFlux passe de 24,6 à
+\textbf{883~req/s}, soit une amélioration de \textbf{35 fois}, confirmant que l'effondrement
+était entièrement dû à la configuration et non à l'architecture réactive elle-même.
 
 \subsection{Virtual Threads et thread pinning}
 
 Le driver JDBC PostgreSQL (\texttt{pgjdbc}) contient des blocs \texttt{synchronized} dans son
 chemin d'exécution, ce qui fixe (\emph{pine}) les virtual threads à leurs threads porteurs
-(ForkJoinPool, borné au nombre de cœurs CPU). Malgré cela, Virtual Threads performe très bien~:
-
-\begin{itemize}
-  \item À saturation~: 798~req/s, soit 2,2 fois MVC + JPA. Le pinning est limité en durée car les
-        requêtes SQL simples (lecture par clé primaire) sont très rapides.
-  \item En I/O-bound~: 233~req/s (second). Les appels au service externe (RestClient bloquant)
-        déchargent correctement les threads porteurs pendant l'attente.
-\end{itemize}
-
-Le pinning peut être diagnostiqué et atténué via
-\texttt{-Djdk.tracePinnedThreads=full} ou en utilisant le driver \texttt{pgjdbc-ng} (sans blocs
-\texttt{synchronized}).
+(ForkJoinPool, borné au nombre de cœurs CPU). Malgré cela, Virtual Threads affiche d'excellentes
+performances dans les deux scénarios concernés. À saturation, il atteint 798~req/s, soit 2,2 fois
+MVC + JPA~: le pinning reste négligeable car les requêtes SQL portent sur une lecture par clé
+primaire, dont la durée d'exécution est très courte. En I/O-bound, Virtual Threads se classe
+deuxième avec 233~req/s~: les appels au service externe via RestClient bloquant déchargent
+correctement les threads porteurs pendant la période d'attente, permettant à d'autres virtual
+threads de s'exécuter. Le pinning peut être diagnostiqué via l'option JVM
+\texttt{-Djdk.tracePinnedThreads=full} et atténué en adoptant un driver sans blocs
+\texttt{synchronized}, tel que \texttt{pgjdbc-ng}.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Synthèse comparative}
@@ -315,23 +307,17 @@ Saturation (800~VUs) & WebFlux                  & WF $>$ VT $\gg$ JPA      & Eve
 \end{tabular}
 \end{center}
 
-\noindent\textbf{Recommandations par cas d'usage~:}
-
-\begin{itemize}
-  \item \textbf{Applications à très haute concurrence (saturation, microservices exposés)~:}
-        Spring WebFlux est le choix optimal. Le modèle event loop Netty gère efficacement des
-        milliers de connexions simultanées avec un minimum de ressources OS.
-
-  \item \textbf{Applications mixtes modernes (charges variées, nouvelles équipes)~:}
-        Spring MVC + Virtual Threads offre le meilleur équilibre. Code impératif simple, migration
-        depuis MVC classique sans refonte, et performances comparables à WebFlux sous la plupart
-        des charges.
-
-  \item \textbf{Applications existantes MVC + JPA sans migration~:}
-        Les performances restent compétitives sur les scénarios I/O-bound et CRUD. La modernisation
-        vers Virtual Threads est triviale (\texttt{spring.threads.virtual.enabled: true}) et
-        apporte un gain immédiat.
-\end{itemize}
+Ces résultats permettent de formuler des recommandations selon le profil d'usage. Pour les
+applications à très haute concurrence — microservices exposés à des pics de trafic ou à une charge
+soutenue de plusieurs centaines de requêtes simultanées — Spring WebFlux représente le choix
+optimal, son modèle event loop Netty gérant efficacement des milliers de connexions avec un minimum
+de ressources système. Pour les applications aux charges variées, ou lorsque la maintenabilité et
+la simplicité du code priment, Spring MVC + Virtual Threads offre le meilleur équilibre~: la
+migration depuis un MVC classique ne requiert qu'un paramètre de configuration
+(\texttt{spring.threads.virtual.enabled: true}), et les performances sont comparables à WebFlux
+dans la quasi-totalité des scénarios. Enfin, pour les applications MVC + JPA existantes que l'on
+ne souhaite pas faire évoluer, le modèle reste compétitif sur les charges I/O-bound modérées, où
+le pool de threads Tomcat constitue un régulateur naturel suffisant.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Conclusion}
