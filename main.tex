@@ -1,0 +1,103 @@
+\documentclass[french,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.54cm]{geometry}
+\usepackage{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage[section]{placeins}
+\usepackage{caption}
+\usepackage{transparent}
+\usepackage{eso-pic}
+
+\setlength\parindent{20pt}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=red!70!black,
+    urlcolor=red!70!black,
+    citecolor=red!70!black
+}
+
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    frame=none,
+    xleftmargin=1em,
+}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+
+\newcommand\BackgroundPic{%
+\put(0,0){%
+\parbox[b][\paperheight]{\paperwidth}{%
+\vfill
+\centering
+{\transparent{0.4}\includegraphics[width=\paperwidth,height=\paperheight]{images/background.png}}%
+\vfill
+}}}
+
+\begin{document}
+
+\AddToShipoutPicture*{\BackgroundPic}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Page titre
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{titlepage}
+    \newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+    \center
+
+    \textsc{\LARGE Université du Québec à Chicoutimi}\\[1.5cm]
+    \textsc{\Large Département d'informatique et de mathématique}\\[0.5cm]
+    \textsc{\large 8CLD876 - Conception/architecture des systèmes infonuagique}\\[0.5cm]
+
+    \HRule\\[0.4cm]
+    {\huge\bfseries Rapport de résultats : Spring MVC,\\[0.2cm]
+    Spring WebFlux et Virtual Threads}\\[0.4cm]
+    \HRule\\[1.5cm]
+
+    \begin{center}
+        \large
+        \textit{Étudiants}\\[0.3cm]
+        BONNEAU Mathieu\\
+        GALICE Mahaut\\
+        JOURDAIN Gregory
+    \end{center}
+
+    \vspace{0.8cm}
+    {\large\textit{Remis à}}\\[0.2cm]
+    Hamid \textsc{McHeick}
+
+    \vfill\vfill\vfill
+    {\large 22 Juin 2026}
+
+    \vfill\vfill
+    \includegraphics[width=0.2\textwidth]{images/logo_uqac.png}\\[1cm]
+
+    \vfill
+\end{titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Table des matières
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\tableofcontents
+\newpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{rapport}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}

@@ -1,0 +1,345 @@
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Ce rapport présente les résultats expérimentaux obtenus lors de la comparaison de trois modèles
+d'exécution pour applications web Java~: Spring MVC avec JPA (bloquant classique), Spring WebFlux
+avec R2DBC (réactif non bloquant) et Spring MVC avec Virtual Threads Java~21 (impératif non
+bloquant).
+
+L'expérimentation suit le protocole commun défini préalablement~\cite{protocole}~: même application
+de gestion de commandes, même base PostgreSQL, même jeu de données (10~000 clients, 5~000 produits,
+100~000 commandes) et mêmes scripts k6. Seul le modèle d'exécution varie entre les versions.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Environnement d'exécution}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Les tests ont été exécutés sur une machine virtuelle commune conformément au protocole~:
+
+\begin{center}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Paramètre} & \textbf{Valeur} \\
+\hline
+Système                & Ubuntu Server 24.04 LTS \\
+CPU                    & 4 vCPU \\
+Mémoire                & 8 Go RAM \\
+Java                   & Java 21 \\
+Build                  & Maven \\
+Tests de charge        & k6 \\
+Base de données        & PostgreSQL (port 5432) \\
+Service externe simulé & Mock HTTP (port 9090, latence contrôlée) \\
+\hline
+\end{tabular}
+\end{center}
+
+Les applications ont été exécutées séparément, une à la fois, avec les mêmes limites de ressources
+(2~vCPU, 1,5~Go RAM par application). Les versions testées et leur configuration de pool de
+connexions sont résumées ci-dessous~:
+
+\begin{center}
+\begin{tabular}{|L{3.5cm}|c|L{4.5cm}|c|c|}
+\hline
+\textbf{Version} & \textbf{Port} & \textbf{Technologies} & \textbf{Pool DB (utilisé)} & \textbf{Pool DB (cible)} \\
+\hline
+Spring MVC + JPA       & 8081 & Spring MVC, Hibernate, JDBC, HikariCP        & 20 & 50 \\
+Spring WebFlux + R2DBC & 8082 & WebFlux, Project Reactor, R2DBC, WebClient   & 10\textsuperscript{*} & 50 \\
+Spring MVC + VT        & 8083 & Spring MVC, JPA, Java~21 Virtual Threads     & 50 & 50 \\
+\hline
+\multicolumn{5}{|l|}{\small \textsuperscript{*}Valeur par défaut de \texttt{r2dbc-pool} (\texttt{spring.r2dbc.pool.max-size}~: 10). Aucune configuration explicite.} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Déviation au protocole.}
+Les trois versions ont été exécutées avec des tailles de pool différentes~: 20~connexions
+(HikariCP) pour MVC JPA, 10~connexions (R2DBC pool par défaut) pour WebFlux et 50~connexions
+(HikariCP) pour Virtual Threads. Le protocole prévoyait une configuration identique pour toutes
+les versions. La valeur cible retenue pour les prochains passages est \textbf{50~connexions pour
+chaque version}. Les résultats présentés dans ce rapport sont ceux des benchmarks tels qu'exécutés~;
+les écarts liés à cette asymétrie sont discutés en section~\ref{sec:impl}.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Protocole de mesure}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Quatre scénarios k6 ont été exécutés conformément au protocole commun~:
+
+\begin{center}
+\begin{tabular}{|l|L{4.5cm}|c|L{3.8cm}|}
+\hline
+\textbf{Scénario} & \textbf{Endpoints sollicités} & \textbf{VU} & \textbf{Objectif} \\
+\hline
+CRUD classique &
+  GET /products/\{id\}, GET/POST /orders, GET /customers/\{id\}/orders &
+  200 & Charge mixte réaliste \\
+I/O-bound &
+  GET /external/recommendations/\{id\} (300~ms simulée) &
+  500 & Concurrence sous attente réseau \\
+CPU-bound &
+  GET /stress/cpu?n=35 (Fibonacci récursif) &
+  50  & Facteur limitant~: CPU \\
+Saturation &
+  GET /products/\{id\} sans pause d'itération &
+  800 & Débit maximal soutenable \\
+\hline
+\end{tabular}
+\end{center}
+
+Les métriques collectées sont~: débit (req/s), latence moyenne, médiane, P95, maximum et taux
+d'erreur HTTP. Toutes les vérifications (\emph{checks}) ont été satisfaites à 100~\% pour
+l'ensemble des scénarios et des versions.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Résultats expérimentaux}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Scénario CRUD classique (200~VU)}
+
+Ce scénario reproduit une charge métier standard~: 60~\% de lectures produit, 20~\% de lectures
+commande, 10~\% de lectures commandes client et 10~\% de créations de commande. L'itération intègre
+une pause d'une seconde, ce qui plafonne le débit par la cadence du test et non par la capacité du
+serveur.
+
+\begin{center}
+\begin{tabular}{|l|r|r|r|r|r|}
+\hline
+\textbf{Version} & \textbf{Req/s} & \textbf{Moy.~(ms)} & \textbf{Méd.~(ms)} & \textbf{P95~(ms)} & \textbf{Max~(ms)} \\
+\hline
+MVC JPA         & 106,78 &  3,51 &  2,51 &  10,12 &  477 \\
+WebFlux         & 106,72 &  4,35 &  2,97 &  13,17 &   97 \\
+Virtual Threads & 106,67 &  4,99 &  3,71 &  14,39 &   88 \\
+\hline
+\end{tabular}
+\end{center}
+
+Les trois versions atteignent un débit identique ($\approx$~106~req/s), confirmant que le goulot
+est la cadence d'itération et non la capacité serveur. MVC JPA affiche la latence la plus faible
+(P95 = 10~ms) mais présente un maximum de 477~ms révélant une pointe ponctuelle (saturation
+momentanée du pool à 20~connexions ou pause GC). WebFlux et Virtual Threads montrent un maximum
+nettement plus stable (97 et 88~ms respectivement).
+
+\subsection{Scénario I/O-bound (500~VU, latence 300~ms)}
+
+Ce scénario évalue la capacité à gérer la concurrence sous attente réseau prolongée. Chaque requête
+attend 300~ms de réponse du service externe simulé, favorisant les architectures non bloquantes.
+
+\begin{center}
+\begin{tabular}{|l|r|r|r|r|r|}
+\hline
+\textbf{Version} & \textbf{Req/s} & \textbf{Moy.~(ms)} & \textbf{Méd.~(ms)} & \textbf{P95~(ms)} & \textbf{Max~(ms)} \\
+\hline
+MVC JPA         &  364,13 & 417,60 & 338,65 & 636,11 &   736 \\
+WebFlux         &  444,13 & 306,24 & 303,41 & 320,47 &   396 \\
+Virtual Threads &  445,33 & 304,69 & 302,44 & 314,82 &   423 \\
+\hline
+\end{tabular}
+\end{center}
+
+WebFlux et Virtual Threads sont statistiquement équivalents ($\approx$~444--445~req/s) et
+maintiennent un P95 à seulement 15--20~ms au-dessus de la latence de base (300~ms). MVC JPA perd
+18~\% de débit~: le pool de threads Tomcat s'épuise lorsque 500~VU bloquent simultanément sur
+l'attente I/O, portant le P95 à 636~ms. Ce résultat est indépendant de la taille du pool de
+connexions~: le goulot est ici le nombre de threads OS disponibles, non les connexions DB.
+
+\subsection{Scénario CPU-bound (50~VU, Fibonacci n=35)}
+
+Ce scénario soumet le serveur à un calcul intensif (Fibonacci récursif naïf, $n = 35$, sans
+mémoïsation) pour observer le comportement lorsque le processeur devient le facteur limitant.
+
+\begin{center}
+\begin{tabular}{|l|r|r|r|r|r|}
+\hline
+\textbf{Version} & \textbf{Req/s} & \textbf{Moy.~(ms)} & \textbf{Méd.~(ms)} & \textbf{P95~(ms)} & \textbf{Max~(ms)} \\
+\hline
+MVC JPA         & 47,79 & 31,88 & 19,89 & 84,77 & 204 \\
+WebFlux         & 47,60 & 33,76 & 22,65 & 83,96 & 217 \\
+Virtual Threads & 47,84 & 31,49 & 27,37 & 50,21 &  87 \\
+\hline
+\end{tabular}
+\end{center}
+
+Les trois versions livrent le même débit ($\approx$~47--48~req/s)~: le facteur limitant est le
+nombre de cœurs CPU, indépendamment du modèle de threading. Virtual Threads se distingue par un
+P95 de 50~ms contre 84~ms pour MVC JPA et WebFlux, soit une amélioration de 40~\% en latence de
+queue. Ce scénario n'implique aucun accès base de données~; la taille du pool de connexions est
+sans effet sur les résultats.
+
+\subsection{Scénario de saturation (800~VU, sans pause)}
+\label{sec:saturation}
+
+Ce scénario mesure le débit maximal soutenable sur un endpoint de lecture simple
+(\texttt{GET /products/\{id\}}), sans tempo d'itération, à 800~VU simultanés.
+
+\begin{center}
+\begin{tabular}{|l|r|r|r|r|r|}
+\hline
+\textbf{Version} & \textbf{Req/s} & \textbf{Moy.~(ms)} & \textbf{Méd.~(ms)} & \textbf{P95~(ms)} & \textbf{Max~(ms)} \\
+\hline
+MVC JPA         & 16\,937 & 17,11 &  6,50 &  65,54 & 855 \\
+WebFlux         & 14\,006 & 20,71 &  6,76 & 106,39 & 266 \\
+Virtual Threads & 12\,299 & 23,58 &  8,71 & 103,71 & 481 \\
+\hline
+\end{tabular}
+\end{center}
+
+MVC JPA délivre 21~\% de débit supplémentaire par rapport à WebFlux et 38~\% par rapport à Virtual
+Threads. WebFlux affiche en revanche le maximum le plus prévisible (266~ms contre 855~ms pour MVC
+JPA). Ce scénario est le plus exposé à l'asymétrie des pools~; les implications sont détaillées en
+section~\ref{sec:impl}.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Analyse et discussion}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Cohérence générale des résultats}
+
+Les résultats sont cohérents avec la théorie des modèles de concurrence Java~:
+
+\begin{center}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Scénario} & \textbf{Résultat observé} & \textbf{Attendu par la théorie} \\
+\hline
+CRUD (itération cadencée) & Tous identiques en débit      & Oui — goulot dans le pacing \\
+I/O-bound                 & VT $\approx$ WebFlux $\gg$ JPA & Oui — threads bloquants épuisés \\
+CPU-bound                 & Tous identiques en débit      & Oui — limité par les cœurs CPU \\
+Saturation                & JPA $>$ WebFlux $>$ VT        & Oui (voir §\ref{sec:impl}) \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Observations sur l'implémentation}
+\label{sec:impl}
+
+\paragraph{WebFlux — scheduler sous-optimal pour le CPU.}
+Le service \texttt{CpuStressService} déporte correctement le calcul hors de la boucle
+événementielle Netty via \texttt{subscribeOn}~:
+
+\begin{lstlisting}[language=Java]
+return Mono.fromCallable(() -> fibonacci(n))
+           .subscribeOn(Schedulers.boundedElastic());
+\end{lstlisting}
+
+Cependant, \texttt{Schedulers.boundedElastic()} est conçu pour des opérations I/O bloquantes, non
+pour du calcul CPU. Son plafond par défaut est $10 \times \text{cœurs}$ threads, ce qui provoque
+une sursouscription du CPU sous charge et augmente la variance de la latence (P95 = 84~ms contre
+50~ms pour Virtual Threads). Le scheduler approprié pour un travail intensif en calcul est
+\texttt{Schedulers.parallel()}, borné au nombre de cœurs.
+
+\paragraph{Asymétrie des pools de connexions et saturation.}
+Les benchmarks ont été exécutés avec trois configurations de pool différentes~: 10~connexions pour
+WebFlux (R2DBC par défaut), 20~connexions pour MVC JPA (HikariCP) et 50~connexions pour Virtual
+Threads (HikariCP). Cette asymétrie complique l'interprétation du scénario de saturation, qui
+sollicite directement la base de données.
+
+Malgré cela, certaines conclusions restent solides. MVC JPA surpasse Virtual Threads (38~\% de
+débit supplémentaire) alors que Virtual Threads dispose de 2,5~fois plus de connexions~: le goulot
+de Virtual Threads n'est donc pas le pool de connexions. La cause probable est le
+\emph{thread pinning}~: le driver JDBC PostgreSQL (\texttt{pgjdbc}) contient des blocs
+\texttt{synchronized} dans ses chemins d'exécution, ce qui fixe (\emph{pin}) les virtual threads
+à leurs threads porteurs (ForkJoinPool, borné au nombre de cœurs). Ce comportement peut être
+diagnostiqué via~:
+
+\begin{lstlisting}[language=bash]
+-Djdk.tracePinnedThreads=full
+\end{lstlisting}
+
+L'avantage de MVC JPA sur WebFlux (21~\%) est quant à lui partiellement influencé par l'asymétrie
+des pools (20 contre 10~connexions)~; une re-exécution avec 50~connexions pour toutes les versions
+permettra de dissocier l'effet du pool de l'overhead propre au pipeline réactif.
+
+\paragraph{Virtual Threads — comportement I/O non affecté.}
+Malgré le risque de pinning, Virtual Threads performe aussi bien que WebFlux dans le scénario
+I/O-bound. Le pinning n'affecte significativement que les endpoints rapides à très haute densité
+de requêtes, où la durée de blocage sur le verrou \texttt{synchronized} représente une fraction
+notable du temps de traitement total.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Synthèse comparative}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\begin{tabular}{|l|l|l|L{4.2cm}|}
+\hline
+\textbf{Scénario} & \textbf{Vainqueur} & \textbf{Classement} & \textbf{Remarque clé} \\
+\hline
+CRUD (200~VU)      & MVC JPA (latence)  & JPA $\approx$ WF $\approx$ VT & Max JPA instable (pool 20) \\
+I/O-bound (500~VU) & WebFlux $\approx$ VT & WF $\approx$ VT $\gg$ JPA & Modèles non bloquants validés \\
+CPU-bound (50~VU)  & VT (queue)         & VT $<$ JPA $\approx$ WF & Scheduler WF sous-optimal \\
+Saturation (800~VU)& MVC JPA            & JPA $>$ WF $>$ VT & Pinning VT~; pools asymétriques \\
+\hline
+\end{tabular}
+\end{center}
+
+Aucun framework ne domine universellement. Le choix optimal dépend du profil de charge~:
+
+\begin{itemize}
+  \item \textbf{Charges I/O-bound~:} WebFlux et Virtual Threads sont équivalents. Virtual Threads
+        présente l'avantage d'un code impératif sans courbe d'apprentissage réactive et sans refonte
+        de la couche d'accès aux données.
+  \item \textbf{Débit maximal sur endpoints rapides~:} MVC JPA reste compétitif et évite l'overhead
+        des pipelines réactifs ou du scheduling des virtual threads, au prix d'un maximum de latence
+        moins prévisible.
+  \item \textbf{Calcul CPU intensif~:} les trois modèles livrent le même débit~; Virtual Threads
+        offre la meilleure latence de queue, et WebFlux atteindrait un résultat équivalent avec
+        \texttt{Schedulers.parallel()}.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+% ══════════════════════════════════════════════════════════════════════════════
+
+Cette expérimentation produit des résultats cohérents avec la théorie des modèles de concurrence.
+Spring WebFlux et Virtual Threads se comportent de façon équivalente sous charge I/O, confirmant
+que Project Loom (JEP~444) atteint son objectif~: permettre d'écrire du code bloquant avec les
+mêmes performances qu'un code réactif. Spring MVC + JPA demeure compétitif, voire supérieur, pour
+des endpoints à forte densité de requêtes.
+
+Deux corrections sont identifiées pour fiabiliser les résultats~:
+\begin{enumerate}
+  \item \textbf{Uniformiser le pool de connexions à 50} pour toutes les versions — MVC JPA
+        (\texttt{hikari.maximum-pool-size: 50}), WebFlux (\texttt{spring.r2dbc.pool.max-size: 50})
+        et Virtual Threads (déjà à 50) — afin d'éliminer le biais actuel du scénario de saturation.
+  \item \textbf{Substituer \texttt{Schedulers.boundedElastic()} par \texttt{Schedulers.parallel()}}
+        dans le service CPU de WebFlux, pour obtenir un résultat représentatif du cas d'usage
+        calcul intensif.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  Références
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{thebibliography}{9}
+
+\bibitem{seda}
+  Welsh M., Culler D. et Brewer E.,
+  \textit{SEDA~: An Architecture for Well-Conditioned, Scalable Internet Services},
+  SOSP, 2001.
+
+\bibitem{spring}
+  Documentation officielle Spring Framework~: Spring MVC, Spring WebFlux et Project Reactor.
+  \url{https://docs.spring.io/spring-framework/reference/}
+
+\bibitem{r2dbc}
+  Documentation Spring Data R2DBC.
+  \url{https://docs.spring.io/spring-data/r2dbc/reference/}
+
+\bibitem{jep444}
+  OpenJDK, \textit{JEP~444~: Virtual Threads}, Java~21.
+  \url{https://openjdk.org/jeps/444}
+
+\bibitem{k6}
+  Documentation officielle k6.
+  \url{https://k6.io/docs/}
+
+\bibitem{actuator}
+  Documentation officielle Spring Boot Actuator et Micrometer.
+  \url{https://docs.spring.io/spring-boot/reference/actuator/}
+
+\bibitem{protocole}
+  Bonneau M., Galice M., Jourdain G.,
+  \textit{Protocole expérimental commun~: Spring MVC, Spring WebFlux et Virtual Threads},
+  UQAC, 8CLD876, 28 mai 2026.
+
+\end{thebibliography}

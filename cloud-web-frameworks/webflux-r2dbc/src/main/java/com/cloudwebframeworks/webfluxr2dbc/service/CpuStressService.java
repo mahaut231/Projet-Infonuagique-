@@ -14,7 +14,7 @@ public class CpuStressService {
             long result = fibonacci(n);
             long duration = System.currentTimeMillis() - start;
             return new CpuStressResponse(n, result, duration);
-        }).subscribeOn(Schedulers.boundedElastic());
+        }).subscribeOn(Schedulers.parallel());
     }
 
     private long fibonacci(int n) {
