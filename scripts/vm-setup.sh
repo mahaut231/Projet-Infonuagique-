@@ -42,15 +42,14 @@ rm /tmp/maven.tar.gz
 
 # ── k6 ────────────────────────────────────────────────────────────────────────
 echo "=== Installation de k6 ==="
-sudo gpg --no-default-keyring \
-    --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-    --keyserver hkp://keyserver.ubuntu.com:80 \
-    --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
-https://dl.k6.io/deb stable main" \
-    | sudo tee /etc/apt/sources.list.d/k6.list > /dev/null
-sudo apt-get update -y
-sudo apt-get install -y k6
+K6_VERSION=$(curl -s https://api.github.com/repos/grafana/k6/releases/latest \
+    | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+echo "    → version détectée : ${K6_VERSION}"
+curl -L "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+    -o /tmp/k6.tar.gz
+tar -xzf /tmp/k6.tar.gz -C /tmp
+sudo mv /tmp/k6-${K6_VERSION}-linux-amd64/k6 /usr/local/bin/k6
+rm -rf /tmp/k6.tar.gz /tmp/k6-${K6_VERSION}-linux-amd64
 
 # ── Vérification ──────────────────────────────────────────────────────────────
 echo ""
