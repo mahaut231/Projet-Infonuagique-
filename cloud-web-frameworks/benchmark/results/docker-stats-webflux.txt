@@ -1,4 +1,4 @@
-CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT   MEM %     NET I/O           BLOCK I/O        PIDS
-596efab942ae   common-postgres   0.48%     33.16MiB / 1.5GiB   2.16%     7.26kB / 10.9kB   12.3kB / 79MB    11
-41feaebb2a3e   mock-service      0.00%     24.32MiB / 512MiB   4.75%     1.55kB / 126B     8.19kB / 4.1kB   18
-8909e12dbd00   webflux-r2dbc     57.89%    201.9MiB / 1.5GiB   13.14%    12.6kB / 6.95kB   0B / 147kB       26
+CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT   MEM %     NET I/O           BLOCK I/O         PIDS
+231e8d08ee2e   common-postgres   0.00%     166.3MiB / 1.5GiB   10.83%    22.6MB / 31.5MB   43.8MB / 53.6MB   56
+9bbf52329278   mock-service      0.00%     78.54MiB / 512MiB   15.34%    15.9MB / 25.1MB   60.5MB / 4.1kB    18
+723b5128998d   webflux-r2dbc     0.00%     346.5MiB / 1.5GiB   22.56%    79.4MB / 70MB     78.8MB / 2.1MB    27
