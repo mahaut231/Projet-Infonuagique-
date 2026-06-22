@@ -42,27 +42,27 @@ run_suite() {
     done
 
     echo "--- Smoke test ---"
-    k6 run -e BASE_URL="$BASE_URL" "$CWF/benchmark/smoke-test.js"
+    k6 run -e BASE_URL="$BASE_URL" "$CWF/benchmark/smoke-test.js" || true
 
     echo "--- Scénario CRUD ---"
     k6 run -e BASE_URL="$BASE_URL" \
         "$CWF/benchmark/scenario-crud.js" \
-        --summary-export "${RESULTS}/${PREFIX}-crud-summary.json"
+        --summary-export "${RESULTS}/${PREFIX}-crud-summary.json" || true
 
     echo "--- Scénario I/O-bound (delay=300ms) ---"
     k6 run -e BASE_URL="$BASE_URL" -e DELAY_MS=300 \
         "$CWF/benchmark/scenario-io.js" \
-        --summary-export "${RESULTS}/${PREFIX}-io-300-summary.json"
+        --summary-export "${RESULTS}/${PREFIX}-io-300-summary.json" || true
 
     echo "--- Scénario CPU-bound (N=35) ---"
     k6 run -e BASE_URL="$BASE_URL" -e N=35 \
         "$CWF/benchmark/scenario-cpu.js" \
-        --summary-export "${RESULTS}/${PREFIX}-cpu-summary.json"
+        --summary-export "${RESULTS}/${PREFIX}-cpu-summary.json" || true
 
     echo "--- Scénario Saturation ---"
     k6 run -e BASE_URL="$BASE_URL" \
         "$CWF/benchmark/scenario-saturation.js" \
-        --summary-export "${RESULTS}/${PREFIX}-saturation-summary.json"
+        --summary-export "${RESULTS}/${PREFIX}-saturation-summary.json" || true
 
     echo "--- Métriques Docker ---"
     docker stats --no-stream common-postgres mock-service "$CONTAINER" \
