@@ -10,7 +10,7 @@ echo "=== Mise à jour apt ==="
 sudo apt-get update -y
 sudo apt-get install -y \
     ca-certificates curl gnupg lsb-release \
-    git jq unzip
+    git jq unzip dirmngr
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 echo "=== Installation de Docker Engine ==="
@@ -42,8 +42,10 @@ rm /tmp/maven.tar.gz
 
 # ── k6 ────────────────────────────────────────────────────────────────────────
 echo "=== Installation de k6 ==="
-curl -fsSL https://dl.k6.io/key.gpg \
-    | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+sudo gpg --no-default-keyring \
+    --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+    --keyserver hkp://keyserver.ubuntu.com:80 \
+    --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
 echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
 https://dl.k6.io/deb stable main" \
     | sudo tee /etc/apt/sources.list.d/k6.list > /dev/null
