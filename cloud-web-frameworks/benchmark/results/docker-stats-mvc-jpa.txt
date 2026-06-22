@@ -1,4 +1,4 @@
-CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT   MEM %     NET I/O           BLOCK I/O         PIDS
-ab6b1604192a   common-postgres   0.32%     124.4MiB / 1.5GiB   8.10%     46.1MB / 44.3MB   10.1MB / 104MB    56
-00ab7b1b7d6d   mock-service      0.00%     22.87MiB / 512MiB   4.47%     27.6MB / 33.3MB   0B / 4.1kB        18
-3eb5fe125d93   mvc-jpa           0.88%     468MiB / 1.5GiB     30.47%    135MB / 163MB     55.6MB / 2.79MB   223
+CONTAINER ID   NAME              CPU %     MEM USAGE / LIMIT   MEM %     NET I/O           BLOCK I/O     PIDS
+c8f997d02ace   common-postgres   0.20%     135MiB / 1.5GiB     8.79%     91.7MB / 90.9MB   0B / 101MB    56
+6054baeebe3e   mock-service      0.00%     23.01MiB / 512MiB   4.49%     16MB / 18.4MB     0B / 4.1kB    18
+87eb627a852d   mvc-jpa           0.51%     467.3MiB / 1.5GiB   30.42%    196MB / 254MB     0B / 2.84MB   223
