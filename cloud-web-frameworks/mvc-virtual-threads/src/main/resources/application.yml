@@ -37,3 +37,8 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  level:
+    root: WARN
+    com.cloudwebframeworks: INFO
