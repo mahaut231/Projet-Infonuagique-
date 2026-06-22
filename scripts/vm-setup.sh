@@ -4,7 +4,7 @@
 set -euo pipefail
 
 MAVEN_VERSION="3.9.9"
-MAVEN_URL="https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+MAVEN_URL="https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
 
 echo "=== Mise à jour apt ==="
 sudo apt-get update -y
